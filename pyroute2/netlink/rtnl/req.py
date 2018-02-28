@@ -17,7 +17,8 @@ from pyroute2.netlink.rtnl.fibmsg import FR_ACT_NAMES
 encap_types = {'mpls': 1,
                AF_MPLS: 1,
                'seg6': 5,
-               'bpf': 6}
+               'bpf': 6,
+               'seg6local': 7}
 
 
 class IPRequest(dict):
@@ -190,6 +191,23 @@ class IPRouteRequest(IPRequest):
                     attrs['LWT_BPF_XMIT'] = {'attrs': obj}
                     if 'headroom' in value:
                         attrs['LWT_BPF_XMIT_HEADROOM'] = value['headroom']
+            return {'attrs': attrs.items()}
+
+        '''
+        seg6local encap header transform. Format samples:
+
+            {'type': 'seg6local',
+             'action': 'bpf',
+             'bpf': {'fd':4, 'name':'firewall'}}
+
+        '''
+        if header['type'] == 'seg6local':
+            attrs = {}
+            if header['action'] == 'bpf':
+                attrs['SEG6_LOCAL_ACTION'] = 15
+                attrs['SEG6_LOCAL_BPF'] = {'attrs':[
+                        ['LWT_BPF_PROG_FD', header['bpf']['fd']],
+                        ['LWT_BPF_PROG_NAME', header['bpf']['name']]]}
 
             return {'attrs': attrs.items()}
 
@@ -294,6 +312,12 @@ class IPRouteRequest(IPRequest):
                                      self.encap_header(value))
                 elif 'type' in value and ('in' in value or 'out' in value
                                           or 'xmit' in value):
+                    dict.__setitem__(self, 'encap_type',
+                                     encap_types.get(value['type'],
+                                                     value['type']))
+                    dict.__setitem__(self, 'encap',
+                                     self.encap_header(value))
+                elif 'type' in value and 'action' in value:
                     dict.__setitem__(self, 'encap_type',
                                      encap_types.get(value['type'],
                                                      value['type']))
